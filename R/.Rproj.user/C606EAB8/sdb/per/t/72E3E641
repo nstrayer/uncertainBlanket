@@ -1,0 +1,21 @@
+{
+    "collab_server" : "",
+    "contents" : "#Script to generate some 3d surface data. \n\nlibrary('rgl')\nlibrary('class')\nlibrary(tidyverse)\nload(url(\"http://statweb.stanford.edu/~tibs/ElemStatLearn/datasets/ESL.mixture.rda\"))\ndat <- ESL.mixture\n\nbayes_surf <- as_data_frame(with(dat, matrix(prob, length(px1), length(px2)))) %>% \n  setNames(dat$px2) %>% \n  mutate(x = dat$px1) %>% \n  gather(y, z, -x)\n\nwrite_csv(bayes_surf, \"../data/bayes_surface.csv\")\n\n\n## use 15-NN to estimate probability of class assignment\npreds.knn <- knn(train=dat$x, test=dat$xnew, cl=dat$y, k=35, prob=TRUE)\nprobs.knn <- attr(preds.knn, 'prob')\nprobs.knn <- ifelse(preds.knn == 1, probs.knn, 1-probs.knn)\ndat$probm.knn <- with(dat, matrix(probs.knn, length(px1), length(px2)))\nrownames(dat$probm.knn) <- dat$px1\ncolnames(dat$probm.knn) <- dat$px2\n\ndf_surf <- as_data_frame(with(dat, matrix(probs.knn, length(px1), length(px2)))) %>% \n  setNames(dat$px2) %>% \n  mutate(x = dat$px1) %>% \n  gather(y, z, -x)\n\nwrite_csv(df_surf, \"../data/knn_surface.csv\")\n",
+    "created" : 1489095909770.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "1828843131",
+    "id" : "72E3E641",
+    "lastKnownWriteTime" : 1489116688,
+    "last_content_update" : 1489116688108,
+    "path" : "~/research/dataviz/uncertainBlanket/R/generate_surface.R",
+    "project_path" : "generate_surface.R",
+    "properties" : {
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

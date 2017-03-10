@@ -1,0 +1,9 @@
+{
+    "path" : "~/research/dataviz/uncertainBlanket",
+    "sortOrder" : [
+        {
+            "ascending" : true,
+            "columnIndex" : 2
+        }
+    ]
+}

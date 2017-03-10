@@ -1,0 +1,30 @@
+#Script to generate some 3d surface data. 
+
+library('rgl')
+library('class')
+library(tidyverse)
+load(url("http://statweb.stanford.edu/~tibs/ElemStatLearn/datasets/ESL.mixture.rda"))
+dat <- ESL.mixture
+
+bayes_surf <- as_data_frame(with(dat, matrix(prob, length(px1), length(px2)))) %>% 
+  setNames(dat$px2) %>% 
+  mutate(x = dat$px1) %>% 
+  gather(y, z, -x)
+
+write_csv(bayes_surf, "../data/bayes_surface.csv")
+
+
+## use 15-NN to estimate probability of class assignment
+preds.knn <- knn(train=dat$x, test=dat$xnew, cl=dat$y, k=35, prob=TRUE)
+probs.knn <- attr(preds.knn, 'prob')
+probs.knn <- ifelse(preds.knn == 1, probs.knn, 1-probs.knn)
+dat$probm.knn <- with(dat, matrix(probs.knn, length(px1), length(px2)))
+rownames(dat$probm.knn) <- dat$px1
+colnames(dat$probm.knn) <- dat$px2
+
+df_surf <- as_data_frame(with(dat, matrix(probs.knn, length(px1), length(px2)))) %>% 
+  setNames(dat$px2) %>% 
+  mutate(x = dat$px1) %>% 
+  gather(y, z, -x)
+
+write_csv(df_surf, "../data/knn_surface.csv")
