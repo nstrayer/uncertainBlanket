@@ -163,12 +163,18 @@
                 requestAnimationFrame( this.animate.bind(this) );
                 this.controls.update();
                 this.render();
+
+				this.current_objects.forEach((obj) => {
+					obj.update_func();
+				})
             }
 
 			//takes an object and adds it to the scene.
 			add_object( object ){
 				this.current_objects.push(object);
 				this.scene.add( object.object );
+
+				// object.update_func.start();
 				console.log(this.current_objects)
 			}
 
@@ -192,6 +198,14 @@
 				    return arr;
 				}
 
+				this.duplicate_array = function(arr){
+					var new_array = new Float32Array(arr.length);
+
+					var i = arr.length;
+					while(i--) new_array[i] = arr[i];
+					return new_array;
+				}
+
 				//grab some info about the data.
 				this.x_range  = d3.extent(data, d => +d[x]);
 				this.x_width  = this.x_range[1] - this.x_range[0];
@@ -203,33 +217,97 @@
 
 				this.data = data;
 				this.z = z; //so we know what to target in the data object later.
-				this.update_func = () => {};
 
 
 				this.make_geometry();
 				this.make_material(color, wireframe);
 				this.combine();
+				this.make_update_func();
 			}
 
 			make_geometry(){
+
 				// geometry of surface
 				var geometry = new THREE.PlaneBufferGeometry(this.x_width, this.y_width,
-					this.unique_x - 1, this.unique_y - 1 );
+					this.unique_x - 1, this.unique_y - 1);
 
+				this.displacement = new Float32Array( geometry.attributes.position.count );
+
+
+				for (var v = 0; v < this.displacement; v++) {
+				  this.displacement.push(Math.random() * 30);
+				}
 				//spits out an array of (x,y,z = 0) times the number of points we have.
-				var vertices = geometry.attributes.position.array;
+				this.vertices = geometry.attributes.position.array;
 
-				//fill in the z coordinate with our data
-				for ( var i = 0; i < this.data.length; i ++) vertices[(3*i) +2] = +this.data[i][this.z]*3;
+				//create two duplicate arrays of verts array for later tweening.
+				this.new_verticies = this.duplicate_array(this.vertices);
 
-				geometry.computeBoundingBox();
-				this.zMin = geometry.boundingBox.min.z;
-				this.zMax = geometry.boundingBox.max.z;
-				this.zRange = this.zMax - this.zMin;
+				//fill in the z coordinates with our data
+				for ( var i = 0; i < this.data.length; i ++) this.new_verticies[(3*i) +2] = +this.data[i][this.z]*3;
+				// for ( var i = 0; i < this.data.length; i ++) vertices[(3*i) +2] = +this.data[i][this.z]*3;
+
+				geometry.attributes.position.array = this.new_verticies;
+				//send our attributes to the geometry
+
+				geometry.addAttribute( 'displacement', new THREE.BufferAttribute( this.displacement, 1 ) );
+				geometry.addAttribute( 'end_verts', new THREE.BufferAttribute( this.new_verticies , 1 ) );
 				this.geometry = geometry;
 			}
 
 			make_material(color, wireframe){
+
+				var vertexShader = `uniform float amplitude;
+									attribute float displacement;
+									attribute vec3 end_verts;
+
+									varying vec3 vNormal;
+									varying vec2 vUv;
+
+									void main() {
+										vNormal = normal;
+										vec3 newPosition = position + normal;
+										gl_Position = projectionMatrix * modelViewMatrix * vec4( newPosition, 1.0 );
+									}`;
+
+				var fragmentShader = `uniform vec3 color;
+									  uniform vec3 diffuse;
+
+									  varying vec3 vNormal;
+									  varying vec2 vUv;
+
+									  void main() {
+									  	  vec3 light = vec3(0.5, 0.2, 1.0);
+									  	  light = normalize( light );
+										  float dProd = max(0.0,dot(vNormal, light));
+				  						  gl_FragColor = vec4(dProd,  // R
+				  						                      dProd,  // G
+				  						                      dProd,  // B
+				  						                      1.0); // A
+									  }`
+
+
+				this.uniforms = THREE.UniformsUtils.merge(
+			        [ THREE.UniformsLib['lights'],
+					  THREE.UniformsLib["ambient"],
+
+			        {
+			          diffuse: {type: 'c', value: new THREE.Color(0x0000ff)},
+					  amplitude: { value: 1.0 },
+  					  color:     { value: new THREE.Color( 0xff2200 ) }
+			        }
+			        ]
+			    )
+
+				console.log(this.uniforms)
+
+				var mat = new THREE.ShaderMaterial({
+		            uniforms: this.uniforms,
+		            vertexShader: vertexShader,
+		            fragmentShader: fragmentShader,
+					lights: true
+		        });
+
 				var surface_color = new THREE.Color(color);
 				//material of surface
 				var material = new THREE.MeshPhongMaterial({
@@ -239,21 +317,29 @@
 					   side: THREE.DoubleSide,
 					   wireframe:wireframe
 				});
-				this.material = material;
+				// this.material = material;
+				this.material = mat;
+
 			}
 
 			combine(){
 				//put together geometry and material
 				var mesh = new THREE.Mesh( this.geometry, this.material );
-
-				//make an object and put our surface into it.
-				this.surface_object = new THREE.Object3D();
-				this.surface_object.add(mesh);
-				this.surface_object.position.set(0,0,0); //might want to take this out.
-				// scene.add( surface_object );
+				this.surface_object = mesh;
 			}
 
+			//if we are tweening let's generate an update function to be called.
+			make_update_func(){
+				this.update_func = () => {
+					var time = Date.now() * 0.001;
+					for ( var i = 0; i < this.displacement.length; i ++ ) {
+						this.displacement[ i ] = Math.sin( 0.1 * i );
+					}
 
+					this.surface_object.geometry.attributes.displacement.needsUpdate = true;
+				}
+
+			}
 
 			//function to return object when called for.
 			object(){
@@ -267,14 +353,14 @@
 		//set up the scene and append to the page
 		var three_scene = new surface_scene("plot");
 
-		d3.csv("data/knn_surface.csv", data => {
-			//create a simple surface from our data and render it to our scene.
-			var my_surface = new simpleSurface(data, x = "x", y = "y", z = "z", color = "steelblue", wireframe = false);
+		// d3.csv("data/knn_surface.csv", data => {
+		// 	//create a simple surface from our data and render it to our scene.
+		// 	var my_surface = new simpleSurface(data, x = "x", y = "y", z = "z", color = "steelblue", wireframe = false);
+		//
+		// 	//add the object to the scene.
+		// 	three_scene.add_object(my_surface.object())
+		// });
 
-			//add the object to the scene.
-			three_scene.add_object(my_surface.object())
-		});
-		
 		d3.csv("data/bayes_surface.csv", data => {
 			//create a simple surface from our data and render it to our scene.
 			var my_surface = new simpleSurface(data, x = "x", y = "y", z = "z", color = "orangered", wireframe = true);

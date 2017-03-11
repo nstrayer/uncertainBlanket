@@ -15,7 +15,7 @@ write_csv(bayes_surf, "../data/bayes_surface.csv")
 
 
 ## use 15-NN to estimate probability of class assignment
-preds.knn <- knn(train=dat$x, test=dat$xnew, cl=dat$y, k=35, prob=TRUE)
+preds.knn <- knn(train=dat$x, test=dat$xnew, cl=dat$y, k=5, prob=TRUE)
 probs.knn <- attr(preds.knn, 'prob')
 probs.knn <- ifelse(preds.knn == 1, probs.knn, 1-probs.knn)
 dat$probm.knn <- with(dat, matrix(probs.knn, length(px1), length(px2)))
